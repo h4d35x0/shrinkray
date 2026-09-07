@@ -13,7 +13,9 @@ a non-technical user is most likely to hit and least likely to diagnose.
 from __future__ import annotations
 
 import json
+import os
 import queue
+import signal
 import shutil
 import subprocess
 import sys
@@ -343,9 +345,29 @@ class App(tk.Tk):
 
     def _cancel(self) -> None:
         self.cancelled = True
-        self.status.set("Stopping after the current file...")
-        if self.proc and self.proc.poll() is None:
-            self.proc.terminate()
+        self.status.set("Stopping...")
+        self._kill_tree()
+
+    def _kill_tree(self) -> None:
+        """Stop the child script AND the encoders it started.
+
+        Popen.terminate() maps to TerminateProcess on Windows, which does not
+        touch the target's children. Measured: cancelling a run left two ffmpeg
+        processes alive and still encoding 13 seconds later, burning the GPU on
+        a file nobody wanted and writing a .part the app believed was abandoned.
+        Kill the whole tree instead.
+        """
+        proc = self.proc
+        if not proc or proc.poll() is not None:
+            return
+        if sys.platform == "win32":
+            subprocess.run(["taskkill", "/PID", str(proc.pid), "/T", "/F"],
+                           capture_output=True, creationflags=NO_WINDOW)
+        else:
+            try:
+                os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+            except (ProcessLookupError, PermissionError):
+                proc.terminate()
 
     def _spawn(self, args: list[str], cwd: Path) -> int:
         """Run one toolkit script, streaming its output into the queue."""
@@ -354,6 +376,9 @@ class App(tk.Tk):
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             text=True, errors="replace", bufsize=1,
             creationflags=NO_WINDOW,
+            # Own process group off Windows, so cancelling can signal the whole
+            # group rather than just the script and orphan the encoders.
+            start_new_session=(sys.platform != "win32"),
         )
         for line in self.proc.stdout:
             self.msgs.put(("log", line.rstrip()))
