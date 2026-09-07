@@ -34,24 +34,29 @@ HERE = Path(__file__).resolve().parent
 FFMPEG_HELP = "https://ffmpeg.org/download.html"
 
 # The point of presets is that nobody should need to know what CQ means.
-# Each is a (label, description, transcode.py flags) triple.
 PRESETS = {
     "Talk or lecture": {
         "blurb": "A person speaking, slides. Smallest files.",
         "args": ["--cq", "34", "--audio-kbps", "64", "--audio-channels", "1"],
-        "ratio": 0.18,
     },
     "Music or performance": {
         "blurb": "Stereo sound at a real bitrate, more detail kept in motion.",
         "args": ["--cq", "30", "--audio-kbps", "160", "--audio-channels", "2"],
-        "ratio": 0.32,
     },
     "Camera footage": {
         "blurb": "General video. Balanced quality and size.",
         "args": ["--cq", "30", "--audio-kbps", "128", "--audio-channels", "2"],
-        "ratio": 0.30,
     },
 }
+
+# The output-size model lives in transcode.py so the window and the command
+# line cannot drift apart on what they promise.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from transcode import predicted_kbps  # noqa: E402
+
+# How many files to probe for a representative bitrate. Probing every file in a
+# large library would make the window sit there doing nothing.
+ESTIMATE_SAMPLE = 15
 
 QUALITY = {
     "Smaller files": 4,
@@ -137,8 +142,11 @@ class App(tk.Tk):
         self.blurb.grid(row=1, column=1, sticky="w", pady=(0, 6))
 
         ttk.Label(box2, text="Quality").grid(row=2, column=0, sticky="w", padx=8, pady=6)
-        ttk.Combobox(box2, textvariable=self.quality, state="readonly",
-                     values=list(QUALITY)).grid(row=2, column=1, sticky="ew", pady=6)
+        qcombo = ttk.Combobox(box2, textvariable=self.quality, state="readonly",
+                              values=list(QUALITY))
+        qcombo.grid(row=2, column=1, sticky="ew", pady=6)
+        # Quality shifts the target bitrate, so the estimate has to follow it.
+        qcombo.bind("<<ComboboxSelected>>", lambda _e: self._estimate())
 
         ttk.Checkbutton(box2, text="Also make audio-only copies, for listening",
                         variable=self.make_audio).grid(
@@ -216,8 +224,14 @@ class App(tk.Tk):
         self.status.set("ffmpeg not found. Install it, then restart shrinkray.")
         self.start_btn.configure(state="disabled")
 
+    def _preset_target_kbps(self) -> float:
+        args = PRESETS[self.preset.get()]["args"]
+        cq = int(args[args.index("--cq") + 1]) + QUALITY[self.quality.get()]
+        audio = int(args[args.index("--audio-kbps") + 1])
+        return predicted_kbps(cq, audio)
+
     def _estimate(self) -> None:
-        """Rough before-you-commit figure, from file sizes alone."""
+        """Kick off a sampled measurement; the answer arrives via the queue."""
         src = self.source.get()
         if not src or not Path(src).is_dir():
             return
@@ -227,11 +241,54 @@ class App(tk.Tk):
         if not files:
             self.estimate.configure(text="No video files found in that folder.")
             return
-        total = sum(p.stat().st_size for p in files)
-        ratio = PRESETS[self.preset.get()]["ratio"]
-        self.estimate.configure(
-            text=f"{len(files)} videos, {human_bytes(total)} now, "
-                 f"roughly {human_bytes(total * ratio)} after. Estimate only.")
+        self.estimate.configure(text=f"{len(files)} videos. Measuring...")
+        target = self._preset_target_kbps()
+        threading.Thread(target=self._measure, args=(files, target),
+                         daemon=True).start()
+
+    def _measure(self, files: list[Path], target: float) -> None:
+        """Probe a sample to learn the real source bitrate, then predict."""
+        total_bytes = sum(p.stat().st_size for p in files)
+        step = max(1, len(files) // ESTIMATE_SAMPLE)
+        sample = files[::step][:ESTIMATE_SAMPLE]
+
+        secs = 0.0
+        sampled_bytes = 0
+        for p in sample:
+            try:
+                r = subprocess.run(
+                    ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+                     "-of", "default=nw=1:nk=1", str(p)],
+                    capture_output=True, text=True, timeout=30,
+                    creationflags=NO_WINDOW)
+                d = float(r.stdout.strip())
+            except (ValueError, OSError, subprocess.SubprocessError):
+                continue
+            if d > 0:
+                secs += d
+                sampled_bytes += p.stat().st_size
+
+        if secs <= 0:
+            self.msgs.put(("estimate",
+                           f"{len(files)} videos, {human_bytes(total_bytes)}. "
+                           f"Could not read them to estimate."))
+            return
+
+        src_kbps = sampled_bytes * 8 / secs / 1000
+        # Never predict a file larger than it already is.
+        out_kbps = min(src_kbps, target)
+        total_secs = total_bytes * 8 / (src_kbps * 1000)
+        out_bytes = total_secs * out_kbps * 1000 / 8
+
+        if src_kbps <= target * 1.15:
+            text = (f"{len(files)} videos, {human_bytes(total_bytes)}. "
+                    f"These are already compressed ({src_kbps:.0f} kbps). "
+                    f"Shrinking them will save little and lose quality.")
+        else:
+            text = (f"{len(files)} videos, {human_bytes(total_bytes)} now, "
+                    f"roughly {human_bytes(out_bytes)} after "
+                    f"({out_bytes / total_bytes * 100:.0f}%). Estimate only.")
+        self.msgs.put(("estimate", text))
 
     # ---------- running ----------
 
@@ -332,7 +389,9 @@ class App(tk.Tk):
         try:
             while True:
                 kind, payload = self.msgs.get_nowait()
-                if kind == "log":
+                if kind == "estimate":
+                    self.estimate.configure(text=str(payload))
+                elif kind == "log":
                     self._say(str(payload))
                 elif kind == "status":
                     self.status.set(str(payload))

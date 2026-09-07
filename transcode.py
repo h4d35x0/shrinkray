@@ -78,6 +78,22 @@ PUNCT_MAP = {
 ID_RE = re.compile(r"^[A-Za-z][A-Za-z0-9]{0,9}-\d+$")
 MAX_STEM = 120
 
+# Predicting output size as a fixed fraction of input size is wrong in both
+# directions, badly. Measured on this encoder: talks at 1346 kbps came out at
+# 18% of source, screen recordings at 2379-8129 kbps at 6%, and already-shrunk
+# 720p HEVC at ~200 kbps at 97%. Output bitrate is set by the target quality and
+# the content, not by how large the input happened to be.
+#
+# Anchor: 720p HEVC at cq 34 measured about 200 kbps of video across 306 talks.
+# Rate roughly halves for every 6 steps of cq.
+ANCHOR_CQ = 34
+ANCHOR_VIDEO_KBPS = 200.0
+
+
+def predicted_kbps(cq: int, audio_kbps: int) -> float:
+    """Expected output bitrate, in kbps, for a given quality setting."""
+    return ANCHOR_VIDEO_KBPS * (2 ** ((ANCHOR_CQ - cq) / 6.0)) + audio_kbps
+
 
 def sanitize(name: str) -> str:
     """Make a title safe as a filename stem on Windows, exFAT and Android."""
@@ -541,7 +557,23 @@ def main() -> int:
     print(f"output:  {out_root}")
     print(f"encoder: {args.encoder} @ {args.height}p, "
           f"{'cq' if args.encoder == 'nvenc' else 'crf'} {args.cq}, "
-          f"{args.workers} worker(s)\n")
+          f"{args.workers} worker(s)")
+
+    # Re-encoding video that is already at or below the target bitrate costs
+    # hours and a generation of quality to save almost nothing. Pointing the
+    # tool at its own output is an easy mistake; say so rather than grinding
+    # through it silently.
+    target = predicted_kbps(args.cq, args.audio_kbps)
+    already = [r for r in records if r["src_kbps"] <= target * 1.15]
+    if already:
+        share = len(already) / len(records)
+        print(f"\nNOTE: {len(already)} of {len(records)} sources are already at or "
+              f"below the target of about {target:.0f} kbps.")
+        if share > 0.5:
+            print("      Most of this library is already compressed. Re-encoding it "
+                  "will save little\n      and lose quality. Check you are not "
+                  "pointing at output from a previous run.")
+    print()
 
     if args.dry_run:
         for record in records[:20]:

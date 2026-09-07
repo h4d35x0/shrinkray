@@ -3,8 +3,14 @@
 Bulk-shrink a folder of video into a phone-sized, properly named, browsable
 library.
 
-Point it at a directory of video and it produces a second copy at roughly a
-fifth of the size, named properly, foldered, and browsable.
+Point it at a directory of video and it produces a second copy at a fraction
+of the size, named properly, foldered, and browsable.
+
+How big a fraction depends on the content, not on the input size. Measured with
+the same settings: conference talks came out at **18%** of source, screen
+recordings at **6%**, and video that was already compressed at **97%**, which
+is to say no gain at all. shrinkray estimates this by measuring your actual
+source bitrate, and tells you plainly when there is nothing to win.
 
 It was built for conference recording packages, which ship a folder of files
 called things like `XX34-105.mp4` alongside an HTML index that knows what those
@@ -46,8 +52,8 @@ the settings so nobody has to know what CQ means:
 | Music or performance | recorded sets, anything musical | 160 kbps stereo |
 | Camera footage | general video | 128 kbps stereo |
 
-It shows a size estimate before you commit, a progress bar while it runs, and
-it can be cancelled. Cancelling is safe: finished files are kept and a later
+It samples your files to estimate the result before you commit, shows a
+progress bar while it runs, and can be cancelled. Cancelling is safe: finished files are kept and a later
 run resumes from them. It drives the same scripts as the command line, so
 there is one encoder path and one verification path, not two.
 
@@ -146,6 +152,14 @@ only a definite failure may delete anything. Retrying an ambiguous check does
 not help either: if a check can be wrong for a reason that persists across
 attempts, repeating it returns the same wrong answer and makes it look
 confirmed.
+
+**Output size follows the target quality, not the input size.** A fixed
+"expect 20% of the original" ratio is wrong in both directions: the same
+settings produced 18% on talks, 6% on screen recordings, and 97% on already
+compressed video. The estimate here predicts an output *bitrate* from the
+quality setting and caps it at the measured source bitrate, so pointing the
+tool at its own output reports "already compressed" instead of promising a
+saving that cannot happen.
 
 **Cheap checks inline, expensive ones alone.** Container and video-stream
 durations are instant and reliable, so they run after every encode. The full
