@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Transcode the DEF CON 34 library to a phone-sized, properly named copy.
+"""Transcode a video library to a phone-sized, properly named copy.
 
 Reads tools/library.json (produced by build_index.py) and writes
 
@@ -263,11 +263,12 @@ def build_cmd(record: dict, dest: Path, args: argparse.Namespace) -> list[str]:
         "-vf", f"scale=-2:trunc(min({args.height}\\,ih)/2)*2",
         *video,
         "-tag:v", "hvc1",
-        "-c:a", "aac", "-b:a", f"{args.audio_kbps}k", "-ac", "1",
+        "-c:a", "aac", "-b:a", f"{args.audio_kbps}k",
+        "-ac", str(args.audio_channels),
         "-movflags", "+faststart",
         "-metadata", f"title={record['title']}",
         "-metadata", f"artist={record['speakers']}",
-        "-metadata", f"album=DEF CON 34 {record['section']}",
+        "-metadata", f"album={args.collection} {record['section']}".strip(),
         str(dest),
     ]
 
@@ -455,7 +456,14 @@ def main() -> int:
     ap.add_argument("--cq", type=int, default=34,
                     help="NVENC cq or x265 crf. Lower is bigger and better. Default 34.")
     ap.add_argument("--height", type=int, default=720)
+    ap.add_argument("--collection", default="",
+                    help="collection name written into each file's album tag")
+    # Defaults suit speech: 64 kbps mono is transparent for a lecture and
+    # halves the audio budget. Music needs stereo and far more bitrate, so a
+    # recorded performance wants roughly --audio-kbps 160 --audio-channels 2.
     ap.add_argument("--audio-kbps", type=int, default=64)
+    ap.add_argument("--audio-channels", type=int, default=1,
+                    help="1 for speech (default), 2 for music")
     ap.add_argument("--nvenc-preset", default="p6")
     ap.add_argument("--x265-preset", default="faster")
     ap.add_argument("--workers", type=int, default=0,

@@ -3,14 +3,16 @@
 Turn a conference recording package into a phone-sized, properly named,
 browsable video library.
 
-Conference recording packages tend to ship two things: a folder of files named
-`XX34-105.mp4`, and an HTML index that knows what those files actually are.
-The video is 1080p at a bitrate chosen for a desktop, which is far more than a
-phone screen needs. So you end up with a hundred gigabytes you cannot navigate
-and will not carry with you.
+Point it at a folder of video and it produces a second copy at roughly a fifth
+of the size, named properly, foldered, and browsable.
 
-This reunites the filenames with the titles, shrinks the library by roughly 5x,
-and hands you something you can actually browse.
+It was built for conference recording packages, which ship a folder of files
+called things like `XX34-105.mp4` alongside an HTML index that knows what those
+files actually are. It reunites the two. But the index is optional: `--scan`
+works on any folder of video at all.
+
+The encoding, verification, resume and supervision machinery is the bulk of it
+and cares nothing about what the video contains.
 
 Measured on one 306-talk package: **105 GB and 173 hours in, 20 GB out**, with
 every file named for its talk and foldered by track. About 16 hours of
@@ -20,7 +22,7 @@ unattended encoding on a consumer GPU.
 
 | Script | Job |
 |---|---|
-| `build_index.py` | Parse the package's `Start Here.html` files plus ffprobe into `library.json` |
+| `build_index.py` | Build `library.json` from an HTML index, or from a plain folder with `--scan` |
 | `transcode.py` | Encode to 720p HEVC. Resumable, atomic writes, verified output |
 | `make_index.py` | Write a searchable `index.html` for the result |
 | `extract_audio.py` | Stream-copy the audio into `.m4a` for listening without video |
@@ -36,10 +38,36 @@ unattended encoding on a consumer GPU.
 ## Usage
 
 ```
-python build_index.py --root /path/to/package    # once, about a minute
+python build_index.py --root /path/to/videos     # once, about a minute
 python transcode.py                              # the long part, resumable
 python make_index.py                             # browsable index
 python extract_audio.py                          # optional, audio-only copies
+```
+
+### Two ways to build the library
+
+**Indexed** (default). For recording packages that ship a "Start Here" HTML
+page mapping opaque filenames to real titles and speakers. Any `*.html` one
+directory below the root that links to `movies/...` is used, so this is not
+tied to a particular conference, year, or filename.
+
+**Scan** (`--scan`). No index required. Every video under the root becomes a
+record, titled from its filename and grouped by its parent directory. This is
+the mode for any other folder of video: recorded sets, lecture captures,
+camera footage.
+
+```
+python build_index.py --scan --root /path/to/footage
+```
+
+### Music, not speech
+
+The defaults are tuned for a person talking: 64 kbps **mono** audio is
+transparent for speech and halves the audio budget. Music needs stereo and far
+more bitrate, and motion-heavy footage needs a lower `--cq`:
+
+```
+python transcode.py --audio-kbps 160 --audio-channels 2 --cq 30
 ```
 
 `transcode.py` resumes by checking which outputs already exist and verify, so
@@ -56,10 +84,15 @@ it if it dies.
 --cq 34                  NVENC cq or x265 crf. Lower is bigger and better
 --height 720             target height; never upscales
 --workers 2              concurrent encoders
---limit 3                smoke test on the first N talks
+--audio-kbps 64          audio bitrate
+--audio-channels 1       1 for speech, 2 for music
+--collection "Name"      written into each file's album tag
+--limit 3                smoke test on the first N videos
 --dry-run                print the plan, touch nothing
 --verify                 thoroughly check existing output, change nothing
 ```
+
+`make_index.py` takes `--title` for the generated page's heading.
 
 ## Notes from building it
 

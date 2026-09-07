@@ -38,7 +38,7 @@ PAGE = """<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>DEF CON 34 talks</title>
+<title>{title}</title>
 <style>
   :root {{ color-scheme: light dark; --fg: #1a1a1a; --dim: #666; --line: #ddd; --bg: #fff; --accent: #0a7; }}
   @media (prefers-color-scheme: dark) {{
@@ -66,7 +66,7 @@ PAGE = """<!doctype html>
 </head>
 <body>
 <header>
-  <h1>DEF CON 34</h1>
+  <h1>{title}</h1>
   <div class="meta">{count} talks &middot; {hours:.1f} hours &middot; {gb:.1f} GB</div>
 </header>
 <main>
@@ -96,6 +96,8 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--library", default="library.json")
     ap.add_argument("--out", default="output")
+    ap.add_argument("--title", default="Video Library",
+                    help="heading and browser title for the generated page")
     args = ap.parse_args()
 
     out_root = Path(args.out).resolve()
@@ -150,7 +152,7 @@ def main() -> int:
     total_b = sum(r["out_bytes"] for r in present)
     (out_root / "index.html").write_text(
         PAGE.format(count=len(present), hours=total_s / 3600, gb=total_b / 1e9,
-                    body="\n".join(chunks)),
+                    title=html.escape(args.title), body="\n".join(chunks)),
         encoding="utf-8",
     )
 
