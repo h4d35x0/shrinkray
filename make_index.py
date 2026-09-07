@@ -127,6 +127,8 @@ def main() -> int:
 
     chunks = []
     for (package, section), items in sorted(groups.items()):
+        # Either level may be empty when the source folder was flat.
+        heading = " &middot; ".join(p for p in (package, section) if p) or "All videos"
         rows = []
         for record in sorted(items, key=lambda r: r["title"].lower()):
             speakers = record["speakers"]
@@ -144,7 +146,7 @@ def main() -> int:
                 f'<div class="sub">{sub}</div></li>'
             )
         chunks.append(
-            f'  <section>\n  <h2>{html.escape(package)} &middot; {html.escape(section)} '
+            f'  <section>\n  <h2>{html.escape(heading)} '
             f'({len(items)})</h2>\n  <ul>\n' + "\n".join(rows) + "\n  </ul>\n  </section>"
         )
 

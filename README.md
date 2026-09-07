@@ -27,6 +27,32 @@ unattended encoding on a consumer GPU.
 | `make_index.py` | Write a searchable `index.html` for the result |
 | `extract_audio.py` | Stream-copy the audio into `.m4a` for listening without video |
 | `supervise.ps1` | Restart the transcode whenever it stops early (Windows) |
+| `shrinkray_gui.py` | A window, for people who do not want a command line |
+
+## The window
+
+If a command line is not your thing:
+
+```
+python shrinkray_gui.py
+```
+
+Pick a folder, pick what kind of video it is, press Start. Three presets carry
+the settings so nobody has to know what CQ means:
+
+| Preset | For | Audio |
+|---|---|---|
+| Talk or lecture | a person speaking, slides | 64 kbps mono |
+| Music or performance | recorded sets, anything musical | 160 kbps stereo |
+| Camera footage | general video | 128 kbps stereo |
+
+It shows a size estimate before you commit, a progress bar while it runs, and
+it can be cancelled. Cancelling is safe: finished files are kept and a later
+run resumes from them. It drives the same scripts as the command line, so
+there is one encoder path and one verification path, not two.
+
+Tkinter ships with Python, so the window adds no dependencies. ffmpeg is still
+required, and the app checks for it at startup rather than failing later.
 
 ## Requirements
 

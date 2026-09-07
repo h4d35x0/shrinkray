@@ -104,7 +104,10 @@ def out_path(record: dict, out_root: Path) -> Path:
         stem = f"{stem} [{record['id']}]"
         if len(stem) > MAX_STEM + 16:
             stem = f"{sanitize(record['title'])[:MAX_STEM - 20]} [{record['id']}]"
-    return out_root / sanitize(record["package"]) / sanitize(record["section"]) / f"{stem}.mp4"
+    # An empty package or section means no grouping at that level, so it must
+    # not become a directory. sanitize() would turn "" into "untitled".
+    parts = [sanitize(p) for p in (record["package"], record["section"]) if p]
+    return out_root.joinpath(*parts, f"{stem}.mp4")
 
 
 # Verification verdicts. These three must never collapse into two.

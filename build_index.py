@@ -181,7 +181,9 @@ def main() -> int:
             # Group by the deepest meaningful directory, skipping a "movies"
             # bucket that only exists to hold the files.
             parts = [p for p in rel.parts[:-1] if p.lower() != "movies"]
-            section = parts[-1] if parts else "Videos"
+            # Empty means "no grouping": the output goes straight into the
+            # destination rather than under an invented directory.
+            section = parts[-1] if parts else ""
             if not args.scan:
                 # An index exists but does not mention this file. Say so rather
                 # than filing it under a directory name: it is the only signal
@@ -198,7 +200,7 @@ def main() -> int:
             "section": info["section"],
             # Top-level grouping directory, or the root's own name when the
             # videos sit directly inside it.
-            "package": rel_parts[0] if len(rel_parts) > 1 else root.name,
+            "package": rel_parts[0] if len(rel_parts) > 1 else "",
             "source": str(path),
             "duration_s": round(duration, 3),
             "size_bytes": size,
