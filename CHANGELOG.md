@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.1.1
+
+### Fixed
+- Cancel now stops the encoders, not just the script. `Popen.terminate()` maps
+  to `TerminateProcess` on Windows, which does not touch child processes:
+  cancelling left ffmpeg running and still writing files the app had reported
+  as abandoned. Kills the whole tree now, verified on Windows and Linux.
+- No console windows when the GUI drives the scripts. Windows gives every child
+  process a console; that was one flash per ffmpeg and ffprobe call.
+- Size estimates come from a measured source bitrate instead of a fixed
+  fraction of the input, which was wrong by 3x and 5x in opposite directions.
+  The same settings produce 18% of source on talks, 6% on screen recordings
+  and 97% on already-compressed video.
+- The GUI warns before starting, not after, when the source is already
+  compressed, which is what happens when you point it at a previous run.
+- Auto-naming no longer produces `Folder (shrunk) (shrunk)`.
+
 ## 0.1.0
 
 First release.
