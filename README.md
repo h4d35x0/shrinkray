@@ -1,4 +1,4 @@
-# dc-talk-toolkit
+# shrinkray
 
 Bulk-shrink a folder of video into a phone-sized, properly named, browsable
 library.
