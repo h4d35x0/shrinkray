@@ -37,6 +37,11 @@ import unicodedata
 from datetime import timedelta
 from pathlib import Path
 
+# Windows gives every child process its own console window, which means one
+# flashing window per ffmpeg and ffprobe call when a GUI drives this. The flag
+# does not exist off Windows, hence the getattr default.
+NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+
 # Windows-reserved device names; a bare one of these cannot be a filename stem.
 RESERVED = {
     "CON", "PRN", "AUX", "NUL",
@@ -129,7 +134,8 @@ def _run_probe(cmd: list[str], timeout: float) -> tuple[bool, str]:
     """Return (measured, stdout). measured is False when ffprobe could not run."""
     try:
         res = subprocess.run(cmd, capture_output=True, text=True,
-                             timeout=timeout, errors="replace")
+                             timeout=timeout, errors="replace",
+                             creationflags=NO_WINDOW)
     except (subprocess.TimeoutExpired, OSError):
         return False, ""
     if res.returncode != 0:
@@ -191,6 +197,7 @@ def decode_verify(path: Path) -> tuple[str, str]:
             ["ffmpeg", "-v", "error", "-nostdin", "-i", str(path),
              "-map", "0:v:0", "-f", "null", "-"],
             capture_output=True, text=True, errors="replace", timeout=3600,
+            creationflags=NO_WINDOW,
         )
     except (subprocess.TimeoutExpired, OSError):
         return UNKNOWN, "decode could not be run (timeout or error)"
@@ -348,7 +355,8 @@ def transcode_one(record: dict, args: argparse.Namespace, counters: Counters,
     part.unlink(missing_ok=True)
 
     cmd = build_cmd(record, part, args)
-    proc = subprocess.run(cmd, capture_output=True, text=True, errors="replace")
+    proc = subprocess.run(cmd, capture_output=True, text=True,
+                          errors="replace", creationflags=NO_WINDOW)
     stderr_tail = "\n".join(proc.stderr.strip().splitlines()[-6:])
 
     if proc.returncode != 0:

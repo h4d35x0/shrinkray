@@ -35,6 +35,11 @@ from transcode import (  # noqa: E402
     _run_probe, out_path, probe_duration,
 )
 
+# Windows gives every child process its own console window, which means one
+# flashing window per ffmpeg and ffprobe call when a GUI drives this. The flag
+# does not exist off Windows, hence the getattr default.
+NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+
 
 def probe_audio_stream(path: Path) -> tuple[bool, float | None]:
     """Duration of the audio stream itself. Returns (measured, seconds)."""
@@ -123,7 +128,8 @@ def extract_one(record: dict, video_root: Path, audio_root: Path,
         "-map_metadata", "0",
         str(part),
     ]
-    proc = subprocess.run(cmd, capture_output=True, text=True, errors="replace")
+    proc = subprocess.run(cmd, capture_output=True, text=True,
+                          errors="replace", creationflags=NO_WINDOW)
     if proc.returncode != 0:
         part.unlink(missing_ok=True)
         with lock:

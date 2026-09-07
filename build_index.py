@@ -35,6 +35,11 @@ import subprocess
 import sys
 from pathlib import Path
 
+# Windows gives every child process its own console window, which means one
+# flashing window per ffmpeg and ffprobe call when a GUI drives this. The flag
+# does not exist off Windows, hence the getattr default.
+NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+
 VIDEO_EXTS = {".mp4", ".mkv", ".mov", ".m4v", ".avi", ".webm", ".ts", ".mpg", ".mpeg"}
 
 # <h2 id="Track 1">Track 1</h2> marks the start of a section's listing.
@@ -122,6 +127,7 @@ def probe(path: Path) -> tuple[float, int, int, int]:
             str(path),
         ],
         capture_output=True, text=True, check=True,
+        creationflags=NO_WINDOW,
     )
     vals = [v for v in res.stdout.split() if v]
     width, height, duration, size = vals[0], vals[1], vals[2], vals[3]

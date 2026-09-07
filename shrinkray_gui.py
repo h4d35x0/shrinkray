@@ -24,6 +24,11 @@ from pathlib import Path
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
+# Windows gives every child process its own console window, which means one
+# flashing window per ffmpeg and ffprobe call when a GUI drives this. The flag
+# does not exist off Windows, hence the getattr default.
+NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+
 HERE = Path(__file__).resolve().parent
 
 FFMPEG_HELP = "https://ffmpeg.org/download.html"
@@ -264,6 +269,7 @@ class App(tk.Tk):
             [sys.executable, "-u", *args], cwd=str(cwd),
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             text=True, errors="replace", bufsize=1,
+            creationflags=NO_WINDOW,
         )
         for line in self.proc.stdout:
             self.msgs.put(("log", line.rstrip()))
