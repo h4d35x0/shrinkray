@@ -1,5 +1,7 @@
 # shrinkray
 
+[![CI](https://github.com/h4d35x0/shrinkray/actions/workflows/ci.yml/badge.svg)](https://github.com/h4d35x0/shrinkray/actions/workflows/ci.yml)
+
 Bulk-shrink a folder of video into a phone-sized, properly named, browsable
 library.
 
@@ -125,6 +127,22 @@ it if it dies.
 ```
 
 `make_index.py` takes `--title` for the generated page's heading.
+
+## Tests
+
+```
+python tests/smoke.py
+```
+
+Generates a few seconds of synthetic video, runs the whole pipeline over it, and
+checks 16 things: indexing, encoding, that the output is actually smaller, that
+subdirectories survive, the full-decode verification, resume skipping finished
+work, the index page, and audio extraction. No fixtures in the repository, so it
+runs anywhere ffmpeg does.
+
+CI runs it on Linux, macOS and Windows on every push, plus Python 3.10 to hold
+the version floor honest. Hosted runners have no NVENC, so CI exercises the
+libx265 path.
 
 ## Notes from building it
 

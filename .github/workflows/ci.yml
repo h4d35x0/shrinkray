@@ -1,0 +1,83 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    name: ${{ matrix.os }} / py${{ matrix.python }}
+    runs-on: ${{ matrix.os }}
+    # One platform failing should not hide the state of the others.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            python: "3.12"
+          - os: macos-latest
+            python: "3.12"
+          - os: windows-latest
+            python: "3.12"
+          # The README claims 3.10+, so prove the floor rather than assume it.
+          - os: ubuntu-latest
+            python: "3.10"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      # Installed from each platform's own package manager rather than a
+      # third-party action, to keep the supply chain short.
+      - name: Install ffmpeg (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
+      - name: Install ffmpeg (macOS)
+        if: runner.os == 'macOS'
+        run: brew install ffmpeg
+
+      - name: Install ffmpeg (Windows)
+        if: runner.os == 'Windows'
+        run: choco install ffmpeg -y --no-progress
+
+      - name: Versions
+        shell: bash
+        run: |
+          python --version
+          ffmpeg -version | head -1
+          ffprobe -version | head -1
+
+      # No NVENC on any hosted runner, so this exercises the libx265 path.
+      - name: Smoke test
+        shell: bash
+        run: python tests/smoke.py
+
+      - name: Syntax check every module
+        shell: bash
+        run: python -m py_compile build_index.py transcode.py make_index.py extract_audio.py shrinkray_gui.py
+
+      # The GUI cannot be shown on a headless runner, but importing it catches
+      # anything platform-specific at module scope, which is where the
+      # creationflags bug would have been. A runner without tkinter is a gap in
+      # the runner, not a defect in the tool, so say so rather than fail red.
+      - name: Import the GUI module
+        shell: bash
+        run: |
+          python - <<'EOF'
+          import sys
+          try:
+              import tkinter  # noqa: F401
+          except ImportError as exc:
+              print(f"tkinter unavailable on this runner ({exc}); skipping GUI import")
+              sys.exit(0)
+          import shrinkray_gui  # noqa: F401
+          print("shrinkray_gui imports cleanly")
+          EOF
