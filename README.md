@@ -1,10 +1,10 @@
 # dc-talk-toolkit
 
-Turn a conference recording package into a phone-sized, properly named,
-browsable video library.
+Bulk-shrink a folder of video into a phone-sized, properly named, browsable
+library.
 
-Point it at a folder of video and it produces a second copy at roughly a fifth
-of the size, named properly, foldered, and browsable.
+Point it at a directory of video and it produces a second copy at roughly a
+fifth of the size, named properly, foldered, and browsable.
 
 It was built for conference recording packages, which ship a folder of files
 called things like `XX34-105.mp4` alongside an HTML index that knows what those
