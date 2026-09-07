@@ -58,6 +58,8 @@ from transcode import predicted_kbps  # noqa: E402
 # large library would make the window sit there doing nothing.
 ESTIMATE_SAMPLE = 15
 
+SHRUNK_SUFFIX = " (shrunk)"
+
 QUALITY = {
     "Smaller files": 4,
     "Balanced": 0,
@@ -102,6 +104,9 @@ class App(tk.Tk):
         self.proc: subprocess.Popen | None = None
         self.cancelled = False
         self.total = 0
+        # Set by the sampled estimate. Start asks for confirmation when true,
+        # because the alternative is discovering it hours into a pointless run.
+        self.already_compressed = False
 
         self._build()
         self.after(100, self._drain)
@@ -203,7 +208,12 @@ class App(tk.Tk):
         if d:
             self.source.set(d)
             if not self.dest.get():
-                self.dest.set(str(Path(d).parent / (Path(d).name + " (shrunk)")))
+                name = Path(d).name
+                # Picking a previous output should not produce
+                # "Foo (shrunk) (shrunk)".
+                if not name.endswith(SHRUNK_SUFFIX):
+                    name += SHRUNK_SUFFIX
+                self.dest.set(str(Path(d).parent / name))
             self._estimate()
 
     def _pick_dest(self) -> None:
@@ -242,6 +252,10 @@ class App(tk.Tk):
             self.estimate.configure(text="No video files found in that folder.")
             return
         self.estimate.configure(text=f"{len(files)} videos. Measuring...")
+        # Clear the previous folder's verdict here rather than relying on the
+        # measurement to overwrite it: the probe can fail and return early,
+        # which would leave a stale warning attached to a different folder.
+        self.already_compressed = False
         target = self._preset_target_kbps()
         threading.Thread(target=self._measure, args=(files, target),
                          daemon=True).start()
@@ -280,7 +294,9 @@ class App(tk.Tk):
         total_secs = total_bytes * 8 / (src_kbps * 1000)
         out_bytes = total_secs * out_kbps * 1000 / 8
 
-        if src_kbps <= target * 1.15:
+        compressed = src_kbps <= target * 1.15
+        self.msgs.put(("compressed", compressed))
+        if compressed:
             text = (f"{len(files)} videos, {human_bytes(total_bytes)}. "
                     f"These are already compressed ({src_kbps:.0f} kbps). "
                     f"Shrinking them will save little and lose quality.")
@@ -305,6 +321,17 @@ class App(tk.Tk):
                 "Same folder",
                 "The destination must be a different folder from the source.")
             return
+
+        if self.already_compressed:
+            warning = "\n\n".join([
+                "These videos are already compressed, so shrinking them "
+                "will save very little and will lose quality.",
+                "This usually means the folder is output from a previous run.",
+                "Continue anyway?",
+            ])
+            if not messagebox.askyesno("Already compressed", warning,
+                                       default="no"):
+                return
 
         self.cancelled = False
         self.start_btn.configure(state="disabled")
@@ -391,6 +418,8 @@ class App(tk.Tk):
                 kind, payload = self.msgs.get_nowait()
                 if kind == "estimate":
                     self.estimate.configure(text=str(payload))
+                elif kind == "compressed":
+                    self.already_compressed = bool(payload)
                 elif kind == "log":
                     self._say(str(payload))
                 elif kind == "status":
